@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lebensmittel Tracker</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f4f4f4; margin:0; padding:16px; }
+    h1 { text-align:center; }
+    .card { background:#fff; padding:16px; border-radius:12px; margin-bottom:12px; }
+    input, select, button { width:100%; padding:10px; margin-top:8px; font-size:16px; }
+    button { background:#000; color:#fff; border:none; border-radius:8px; }
+    ul { list-style:none; padding:0; }
+    li { padding:6px 0; border-bottom:1px solid #ddd; }
+    .tag { font-size:12px; background:#eee; padding:2px 6px; border-radius:6px; margin-left:6px; }
+    .warning { background:#ffe5e5; padding:10px; border-radius:8px; margin-bottom:12px; color:#900; }
+    .green { color:green; }
+    .yellow { color:orange; }
+    .red { color:red; }
+  </style>
+</head>
+<body>
+<h1>🍽️ Lebensmittel Tracker</h1>
+
+<div class="card">
+  <label>Datum</label>
+  <input type="date" id="dateInput" />
+</div>
+
+<div id="warning"></div>
+
+<div class="card">
+  <label>Lebensmittel</label>
+  <input id="foodInput" placeholder="z.B. Hähnchen + Reis" />
+
+  <label>Mahlzeit</label>
+  <select id="mealInput">
+    <option>Frühstück</option>
+    <option>Mittag</option>
+    <option>Abend</option>
+  </select>
+
+  <label>Proteinreich?</label>
+  <select id="proteinInput">
+    <option value="ja">Ja</option>
+    <option value="nein">Nein</option>
+  </select>
+
+  <label>Tag</label>
+  <select id="tagInput">
+    <option>Normal</option>
+    <option>Snack</option>
+    <option>Cheat</option>
+  </select>
+
+  <button id="saveBtn">Speichern</button>
+</div>
+
+<div class="card">
+  <h3>Einträge</h3>
+  <ul id="foodList"></ul>
+</div>
+
+<div class="card">
+  <h3>Gewicht (1× pro Woche)</h3>
+  <input id="weightInput" type="number" step="0.1" placeholder="z.B. 85.2" />
+  <button id="weightBtn">Gewicht speichern</button>
+</div>
+
+<div class="card">
+  <h3>Wochenübersicht</h3>
+  <ul id="weekList"></ul>
+  <p id="ampel"></p>
+</div>
+
+<script>
+// --- Helpers ---
+function qs(id) { return document.getElementById(id); }
+function today() { return new Date().toISOString().split('T')[0]; }
+
+// --- Init ---
+qs('dateInput').value = today();
+
+function getData(date) {
+  try {
+    return JSON.parse(localStorage.getItem(date)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveData(date, data) {
+  localStorage.setItem(date, JSON.stringify(data));
+}
+
+function renderDay() {
+  const date = qs('dateInput').value;
+  const data = getData(date);
+  const list = qs('foodList');
+  list.innerHTML = '';
+
+  let snackCount = 0;
+
+  data.forEach(item => {
+    if (item.tag !== 'Normal') snackCount++;
+    const li = document.createElement('li');
+    li.innerHTML = `${item.time} – <b>${item.meal}</b>: ${item.food} <span class="tag">${item.tag}</span> ${item.protein === 'ja' ? '🥩' : ''}`;
+    list.appendChild(li);
+  });
+
+  const now = new Date();
+  const warnings = [];
+  if (snackCount >= 2) warnings.push(`⚠️ ${snackCount} Snacks/Cheats heute`);
+  if (now.getHours() >= 20 && data.length > 0) warnings.push('⏰ Essensfenster überschritten');
+
+  qs('warning').innerHTML = warnings.length ? `<div class="warning">${warnings.join('<br>')}</div>` : '';
+}
+
+function renderWeek() {
+  const weekList = qs('weekList');
+  weekList.innerHTML = '';
+  let totalSnacks = 0;
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split('T')[0];
+    const entries = getData(key);
+    if (!entries.length) continue;
+
+    const snacks = entries.filter(e => e.tag !== 'Normal').length;
+    totalSnacks += snacks;
+
+    const li = document.createElement('li');
+    li.textContent = `${key}: ${entries.length} Einträge, ${snacks} Snacks/Cheats`;
+    weekList.appendChild(li);
+  }
+
+  const ampel = qs('ampel');
+  if (totalSnacks <= 3) ampel.innerHTML = '<span class="green">🟢 Grün – alles im Plan</span>';
+  else if (totalSnacks <= 6) ampel.innerHTML = '<span class="yellow">🟡 Gelb – aufpassen</span>';
+  else ampel.innerHTML = '<span class="red">🔴 Rot – Ziel gefährdet</span>';
+}
+
+// --- Events ---
+qs('saveBtn').addEventListener('click', () => {
+  const date = qs('dateInput').value;
+  const food = qs('foodInput').value.trim();
+  if (!food) return;
+
+  const data = getData(date);
+  data.push({
+    food,
+    meal: qs('mealInput').value,
+    protein: qs('proteinInput').value,
+    tag: qs('tagInput').value,
+    time: new Date().toLocaleTimeString().slice(0,5)
+  });
+
+  saveData(date, data);
+  qs('foodInput').value = '';
+  renderDay();
+  renderWeek();
+});
+
+qs('weightBtn').addEventListener('click', () => {
+  const weekKey = 'weight-' + qs('dateInput').value.slice(0,7);
+  const val = qs('weightInput').value;
+  if (!val) return;
+  localStorage.setItem(weekKey, val);
+  qs('weightInput').value = '';
+});
+
+qs('dateInput').addEventListener('change', () => {
+  renderDay();
+});
+
+// --- First render ---
+renderDay();
+renderWeek();
+</script>
+</body>
+</html>
