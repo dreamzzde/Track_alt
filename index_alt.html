@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lebensmittel Tracker</title>
-  <link rel="manifest" href="manifest.json">
   <style>
     body { font-family: system-ui, sans-serif; background:#f4f4f4; margin:0; padding:16px; }
     h1 { text-align:center; }
@@ -54,7 +53,7 @@
     <option>Cheat</option>
   </select>
 
-  <button onclick="addFood()">Speichern</button>
+  <button id="saveBtn">Speichern</button>
 </div>
 
 <div class="card">
@@ -65,7 +64,7 @@
 <div class="card">
   <h3>Gewicht (1× pro Woche)</h3>
   <input id="weightInput" type="number" step="0.1" placeholder="z.B. 85.2" />
-  <button onclick="saveWeight()">Gewicht speichern</button>
+  <button id="weightBtn">Gewicht speichern</button>
 </div>
 
 <div class="card">
@@ -75,23 +74,33 @@
 </div>
 
 <script>
-const dateInput = document.getElementById('dateInput');
-dateInput.value = new Date().toISOString().split('T')[0];
+// --- Helpers ---
+function qs(id) { return document.getElementById(id); }
+function today() { return new Date().toISOString().split('T')[0]; }
+
+// --- Init ---
+qs('dateInput').value = today();
 
 function getData(date) {
-  return JSON.parse(localStorage.getItem(date)) || [];
+  try {
+    return JSON.parse(localStorage.getItem(date)) || [];
+  } catch {
+    return [];
+  }
 }
+
 function saveData(date, data) {
   localStorage.setItem(date, JSON.stringify(data));
 }
 
 function renderDay() {
-  const date = dateInput.value;
+  const date = qs('dateInput').value;
   const data = getData(date);
-  const list = document.getElementById('foodList');
+  const list = qs('foodList');
   list.innerHTML = '';
 
   let snackCount = 0;
+
   data.forEach(item => {
     if (item.tag !== 'Normal') snackCount++;
     const li = document.createElement('li');
@@ -100,33 +109,15 @@ function renderDay() {
   });
 
   const now = new Date();
-  const warningBox = document.getElementById('warning');
-  let warnings = [];
+  const warnings = [];
   if (snackCount >= 2) warnings.push(`⚠️ ${snackCount} Snacks/Cheats heute`);
   if (now.getHours() >= 20 && data.length > 0) warnings.push('⏰ Essensfenster überschritten');
 
-  warningBox.innerHTML = warnings.length ? `<div class="warning">${warnings.join('<br>')}</div>` : '';
-}
-
-function addFood() {
-  const date = dateInput.value;
-  const data = getData(date);
-  data.push({ food: foodInput.value, meal: mealInput.value, protein: proteinInput.value, tag: tagInput.value, time: new Date().toLocaleTimeString().slice(0,5) });
-  saveData(date, data);
-  foodInput.value = '';
-  renderDay();
-  renderWeek();
-}
-
-function saveWeight() {
-  const weekKey = 'weight-' + dateInput.value.slice(0,7);
-  localStorage.setItem(weekKey, weightInput.value);
-  weightInput.value = '';
-  renderWeek();
+  qs('warning').innerHTML = warnings.length ? `<div class="warning">${warnings.join('<br>')}</div>` : '';
 }
 
 function renderWeek() {
-  const weekList = document.getElementById('weekList');
+  const weekList = qs('weekList');
   weekList.innerHTML = '';
   let totalSnacks = 0;
 
@@ -136,23 +127,55 @@ function renderWeek() {
     const key = d.toISOString().split('T')[0];
     const entries = getData(key);
     if (!entries.length) continue;
+
     const snacks = entries.filter(e => e.tag !== 'Normal').length;
     totalSnacks += snacks;
+
     const li = document.createElement('li');
     li.textContent = `${key}: ${entries.length} Einträge, ${snacks} Snacks/Cheats`;
     weekList.appendChild(li);
   }
 
-  const ampel = document.getElementById('ampel');
+  const ampel = qs('ampel');
   if (totalSnacks <= 3) ampel.innerHTML = '<span class="green">🟢 Grün – alles im Plan</span>';
   else if (totalSnacks <= 6) ampel.innerHTML = '<span class="yellow">🟡 Gelb – aufpassen</span>';
   else ampel.innerHTML = '<span class="red">🔴 Rot – Ziel gefährdet</span>';
 }
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
-}
+// --- Events ---
+qs('saveBtn').addEventListener('click', () => {
+  const date = qs('dateInput').value;
+  const food = qs('foodInput').value.trim();
+  if (!food) return;
 
+  const data = getData(date);
+  data.push({
+    food,
+    meal: qs('mealInput').value,
+    protein: qs('proteinInput').value,
+    tag: qs('tagInput').value,
+    time: new Date().toLocaleTimeString().slice(0,5)
+  });
+
+  saveData(date, data);
+  qs('foodInput').value = '';
+  renderDay();
+  renderWeek();
+});
+
+qs('weightBtn').addEventListener('click', () => {
+  const weekKey = 'weight-' + qs('dateInput').value.slice(0,7);
+  const val = qs('weightInput').value;
+  if (!val) return;
+  localStorage.setItem(weekKey, val);
+  qs('weightInput').value = '';
+});
+
+qs('dateInput').addEventListener('change', () => {
+  renderDay();
+});
+
+// --- First render ---
 renderDay();
 renderWeek();
 </script>
